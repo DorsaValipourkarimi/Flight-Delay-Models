@@ -1,59 +1,75 @@
 import pandas as pd
 import numpy as np
-
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression, Ridge, Lasso
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from sklearn.ensemble import RandomForestRegressor
 
-
-# STEP 0 — Load dataset
-df = pd.read_csv("DelayedFlights.csv")  # adjust filename
+# Step 0: Load and quick inspect
+df = pd.read_csv("DelayedFlights.csv")   
 print("Initial shape:", df.shape)
 print("Columns:", df.columns)
-print("\nMissing values:\n", df.isnull().sum())
 
-# STEP 1 — CLEANING
-# Drop cancelled flights (they have no timing values to predict)
-df = df[df["cancelled"] == 0]
+print("\nMissing values:")
+print(df.isna().sum())
 
-# Drop columns not useful for regression / high-cardinality text
-df = df.drop(columns=[
-    "fl_date", 
-    "origin_city_name", 
-    "origin_state_nm"
-])
+# Step 1: Filter + select columns 
+# Kept only non-cancelled flights
+df = df[df["cancelled"] == 0].copy()
 
-# Choose target variable for regression
-target = "taxi_out"     # You can change: "air_time", "late_aircraft_delay", etc.
+# Our target: minutes of weather delay
+y = df["weather_delay"]
 
-# Remove rows where target is missing
-df = df[df[target].notna()]
+# Features we keep:
+# - date-related: month, day_of_month, day_of_week
+# - route-related: distance
+# - airport: origin_city_name (we'll encode it)
+feature_cols = ["month", "day_of_month", "day_of_week", "distance", "origin_city_name"]
+X = df[feature_cols].copy()
 
-# Impute remaining numeric missing values with median
-num_cols = df.select_dtypes(include=[np.number]).columns
-df[num_cols] = df[num_cols].fillna(df[num_cols].median())
+print("\nAfter filtering cancelled flights:")
+print("X shape:", X.shape)
+print("y shape:", y.shape)
 
-# STEP 2 — ENCODING CATEGORICAL FEATURES
-cat_cols = df.select_dtypes(include=["object"]).columns.tolist()
-
-df = pd.get_dummies(df, columns=cat_cols, drop_first=True)
-
-
-# STEP 3 — Train/Test Split
-X = df.drop(columns=[target])
-y = df[target]
-
+# Step 2: Train/test split 
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
 )
 
 print("\nTrain size:", X_train.shape)
 print("Test size:", X_test.shape)
 
-# STEP 4 — NORMALIZATION
-scaler = StandardScaler()
+# Step 3: Encode origin_city_name (target encoding) 
+# Compute mean weather_delay per city on the TRAINING set only
+city_means = (
+    pd.DataFrame({"origin_city_name": X_train["origin_city_name"], "weather_delay": y_train})
+    .groupby("origin_city_name")["weather_delay"]
+    .mean()
+)
 
+# Map to numeric column
+X_train["origin_city_enc"] = X_train["origin_city_name"].map(city_means)
+
+# For cities that appear only in the test set, fill with global mean
+global_mean_delay = y_train.mean()
+X_test["origin_city_enc"] = X_test["origin_city_name"].map(city_means).fillna(global_mean_delay)
+
+# Drop the original text column
+X_train = X_train.drop(columns=["origin_city_name"])
+X_test = X_test.drop(columns=["origin_city_name"])
+
+print("\nAfter encoding origin_city_name:")
+print("X_train columns:", X_train.columns)
+print("X_train head:\n", X_train.head())
+
+# Step 4: Scale numeric features 
+scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
+
+print("\nFinal shapes after scaling:")
+print("X_train_scaled:", X_train_scaled.shape)
+print("X_test_scaled:", X_test_scaled.shape)
+print("Ready for regression modeling.")
+
