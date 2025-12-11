@@ -91,7 +91,7 @@ es = callbacks.EarlyStopping(
 history = model.fit(
     X_train, y_train,
     validation_data=(X_dev, y_dev),
-    epochs=20,
+    epochs=30,
     batch_size=1024,
     class_weight=class_weight,
     verbose=1,
