@@ -53,7 +53,7 @@ X = df[numeric_features + categorical_features].copy()
 y = df[target].copy()
 
 # -------------------------------------------------
-# 4. Handle missing values (simple)
+# 4. Handle missing values 
 # -------------------------------------------------
 for col in numeric_features:
     X[col] = X[col].fillna(X[col].median())
